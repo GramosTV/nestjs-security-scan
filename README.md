@@ -31,13 +31,13 @@ npm install --save-dev nestjs-security-scan
 Run the security scanner in your NestJS project:
 
 ```bash
-nestjs-security-scan
+npx nestjs-security-scan
 ```
 
 ### Options
 
 ```bash
-Usage: nestjs-security-scan [options]
+Usage: npx nestjs-security-scan [options]
 
 Options:
   -V, --version       output the version number
@@ -55,19 +55,19 @@ Options:
 #### Scanning a specific NestJS project
 
 ```bash
-nestjs-security-scan -p /path/to/nestjs-project
+npx nestjs-security-scan -p /path/to/nestjs-project
 ```
 
 #### Generating a JSON report
 
 ```bash
-nestjs-security-scan -o json > security-report.json
+npx nestjs-security-scan -o json > security-report.json
 ```
 
 #### Skip dependency scanning
 
 ```bash
-nestjs-security-scan --no-deps
+npx nestjs-security-scan --no-deps
 ```
 
 ## Security Checks
