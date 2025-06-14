@@ -1,4 +1,3 @@
-import * as fs from 'fs-extra';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { SecurityVulnerability, Scanner } from '../types';
@@ -88,13 +87,13 @@ export class DependencyScanner implements Scanner {
         if (parsedSnyk.length > 0) {
           console.log(`Found ${parsedSnyk.length} vulnerabilities from Snyk`);
         }
-      } catch (error) {
+      } catch {
         // Snyk might not be authenticated or installed globally, so we'll just skip it
         this.log('Skipping Snyk scan (may not be installed or authenticated)');
       }
 
       this.log(
-        `Dependency scanner completed. Scanned ${this.scannedFiles.length} files, found ${vulnerabilities.length} vulnerabilities`
+        `Dependency scanner completed. Scanned ${this.scannedFiles.length} files, found ${vulnerabilities.length} vulnerabilities`,
       );
 
       // Always display the total number of dependency vulnerabilities found
@@ -147,36 +146,43 @@ export class DependencyScanner implements Scanner {
       }
 
       // Process each vulnerability found by npm audit
-      Object.entries(auditData.vulnerabilities).forEach(([packageName, vulnData]: [string, any]) => {
-        const severity = this.mapNpmSeverity(vulnData.severity);
-        const severityColor = this.getSeverityColor(severity);
+      Object.entries(auditData.vulnerabilities).forEach(
+        ([packageName, vulnData]: [string, any]) => {
+          const severity = this.mapNpmSeverity(vulnData.severity);
+          const severityColor = this.getSeverityColor(severity);
 
-        // Format and colorize the vulnerability finding
-        console.log(
-          `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(packageName)}: ` +
-            `${severityColor(`[${severity.toUpperCase()}]`)} ${chalk.bold(vulnData.name || packageName)}`
-        );
+          // Format and colorize the vulnerability finding
+          console.log(
+            `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(packageName)}: ` +
+              `${severityColor(`[${severity.toUpperCase()}]`)} ${chalk.bold(vulnData.name || packageName)}`,
+          );
 
-        vulnerabilities.push({
-          id: `npm-${vulnData.name}-${vulnData.source || packageName}`,
-          title: `Vulnerable dependency: ${packageName}`,
-          description: vulnData.overview || `${packageName} has known security vulnerabilities`,
-          severity,
-          location: packageName,
-          recommendation:
-            vulnData.recommendation || `Upgrade to ${vulnData.fixAvailable?.version || 'a newer version'}`,
-          reference:
-            vulnData.url || 'https://docs.npmjs.com/auditing-package-dependencies-for-security-vulnerabilities',
-          category: 'dependency',
-        });
-      });
+          vulnerabilities.push({
+            id: `npm-${vulnData.name}-${vulnData.source || packageName}`,
+            title: `Vulnerable dependency: ${packageName}`,
+            description: vulnData.overview || `${packageName} has known security vulnerabilities`,
+            severity,
+            location: packageName,
+            recommendation:
+              vulnData.recommendation ||
+              `Upgrade to ${vulnData.fixAvailable?.version || 'a newer version'}`,
+            reference:
+              vulnData.url ||
+              'https://docs.npmjs.com/auditing-package-dependencies-for-security-vulnerabilities',
+            category: 'dependency',
+          });
+        },
+      );
 
       return vulnerabilities;
     } catch (error) {
       if (this.verbose) {
         console.error('Error parsing npm audit output:', error);
         // Log the problematic output for debugging
-        console.error('Problematic npm audit output:', output.substring(0, 500) + (output.length > 500 ? '...' : ''));
+        console.error(
+          'Problematic npm audit output:',
+          output.substring(0, 500) + (output.length > 500 ? '...' : ''),
+        );
       }
       return [];
     }
@@ -222,7 +228,7 @@ export class DependencyScanner implements Scanner {
         // Format and colorize the vulnerability finding
         console.log(
           `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(vuln.packageName)}: ` +
-            `${severityColor(`[${severity.toUpperCase()}]`)} ${chalk.bold(vuln.title || '')}`
+            `${severityColor(`[${severity.toUpperCase()}]`)} ${chalk.bold(vuln.title || '')}`,
         );
 
         vulnerabilities.push({
@@ -231,7 +237,9 @@ export class DependencyScanner implements Scanner {
           description: vuln.title || `${vuln.packageName} has known security vulnerabilities`,
           severity,
           location: vuln.packageName,
-          recommendation: vuln.fixedIn ? `Upgrade to ${vuln.packageName}@${vuln.fixedIn[0]}` : 'No fix available yet',
+          recommendation: vuln.fixedIn
+            ? `Upgrade to ${vuln.packageName}@${vuln.fixedIn[0]}`
+            : 'No fix available yet',
           reference: vuln.url || 'https://snyk.io/vuln/',
           category: 'dependency',
         });

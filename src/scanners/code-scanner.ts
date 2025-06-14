@@ -1,12 +1,9 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { SecurityVulnerability, Scanner } from '../types';
-import { promisify } from 'util';
-import { exec } from 'child_process';
 import * as globModule from 'glob';
 import chalk from 'chalk';
 
-const execPromise = promisify(exec);
 // Use synchronous glob instead of trying to promisify
 const globSync = globModule.sync;
 
@@ -22,21 +19,26 @@ export class CodeScanner implements Scanner {
       regex: /TypeOrmModule\.forRoot\({[\s\S]*?synchronize:\s*true/gm,
       severity: 'high',
       title: 'Automatic Schema Synchronization in Production',
-      description: 'TypeORM is configured with synchronize: true, which can cause data loss in production environments',
-      recommendation: 'Set synchronize: false in production environments and use migrations instead',
+      description:
+        'TypeORM is configured with synchronize: true, which can cause data loss in production environments',
+      recommendation:
+        'Set synchronize: false in production environments and use migrations instead',
     },
     {
       regex: /createConnection\({[\s\S]*?synchronize:\s*true/gm,
       severity: 'high',
       title: 'Automatic Schema Synchronization in Production',
-      description: 'TypeORM is configured with synchronize: true, which can cause data loss in production environments',
-      recommendation: 'Set synchronize: false in production environments and use migrations instead',
+      description:
+        'TypeORM is configured with synchronize: true, which can cause data loss in production environments',
+      recommendation:
+        'Set synchronize: false in production environments and use migrations instead',
     },
     {
       regex: /@Body\(\s*\)(?!\s*@ValidateNested|\s*@UsePipes)/gm,
       severity: 'medium',
       title: 'Missing DTO Validation',
-      description: 'Request body is used without validation, which can lead to data injection attacks',
+      description:
+        'Request body is used without validation, which can lead to data injection attacks',
       recommendation:
         'Apply validation using class-validator and class-transformer with ValidateNested or ValidationPipe',
     },
@@ -44,7 +46,8 @@ export class CodeScanner implements Scanner {
       regex: /cors:\s*true/gm,
       severity: 'medium',
       title: 'Permissive CORS Policy',
-      description: 'CORS is configured to allow all origins, which can lead to cross-site request forgery attacks',
+      description:
+        'CORS is configured to allow all origins, which can lead to cross-site request forgery attacks',
       recommendation: 'Configure CORS with specific origins, methods, and credentials settings',
     },
     {
@@ -52,7 +55,8 @@ export class CodeScanner implements Scanner {
       severity: 'high',
       title: 'Hardcoded JWT Secret',
       description: 'JWT secret is hardcoded in the source code, which is a security risk',
-      recommendation: 'Use environment variables for JWT secrets and other sensitive configuration values',
+      recommendation:
+        'Use environment variables for JWT secrets and other sensitive configuration values',
     },
     {
       regex: /eval\s*\(/gm,
@@ -65,8 +69,10 @@ export class CodeScanner implements Scanner {
       regex: /helmet\s*\(\s*\)/gm,
       severity: 'low',
       title: 'Default Helmet Configuration',
-      description: 'Using default Helmet configuration may not provide optimal security for your specific application',
-      recommendation: 'Configure Helmet with specific security options based on your application requirements',
+      description:
+        'Using default Helmet configuration may not provide optimal security for your specific application',
+      recommendation:
+        'Configure Helmet with specific security options based on your application requirements',
     },
     {
       regex:
@@ -154,7 +160,7 @@ export class CodeScanner implements Scanner {
       }
 
       this.log(
-        `Code scanner completed. Scanned ${this.scannedFiles.length} files, found ${this.vulnerabilities.length} vulnerabilities`
+        `Code scanner completed. Scanned ${this.scannedFiles.length} files, found ${this.vulnerabilities.length} vulnerabilities`,
       );
 
       // Always display the number of vulnerabilities found
@@ -237,8 +243,9 @@ export class CodeScanner implements Scanner {
           const severityColor = this.getSeverityColor(pattern.severity);
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativeFilePath)}:${chalk.yellow(
-              lineNumber.toString()
-            )}: ` + `${severityColor(`[${pattern.severity.toUpperCase()}]`)} ${chalk.bold(pattern.title)}`
+              lineNumber.toString(),
+            )}: ` +
+              `${severityColor(`[${pattern.severity.toUpperCase()}]`)} ${chalk.bold(pattern.title)}`,
           );
 
           this.vulnerabilities.push({

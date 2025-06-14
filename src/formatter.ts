@@ -1,16 +1,16 @@
 import chalk from 'chalk';
-import { ScanResult, SecurityVulnerability, VulnerabilitySeverity } from './types';
+import { ScanResult, SecurityVulnerability, VulnerabilitySeverity, OutputFormat } from './types';
+import { CONSTANTS } from './constants';
 
-// Fix TypeScript error by defining the ChalkFunction type
 type ChalkFunction = chalk.Chalk;
 
 const getSeverityColor = (severity: VulnerabilitySeverity): ChalkFunction => {
   switch (severity) {
-    case 'high':
+    case CONSTANTS.SEVERITY_LEVELS.HIGH:
       return chalk.red.bold;
-    case 'medium':
+    case CONSTANTS.SEVERITY_LEVELS.MEDIUM:
       return chalk.yellow.bold;
-    case 'low':
+    case CONSTANTS.SEVERITY_LEVELS.LOW:
       return chalk.blue.bold;
     default:
       return chalk.white;
@@ -18,7 +18,6 @@ const getSeverityColor = (severity: VulnerabilitySeverity): ChalkFunction => {
 };
 
 const formatTextOutput = (result: ScanResult, verbose: boolean = false): void => {
-  // Always show the summary and vulnerabilities
   console.log('\n' + chalk.bold.underline('SECURITY SCAN SUMMARY'));
   console.log('─'.repeat(80));
 
@@ -26,8 +25,12 @@ const formatTextOutput = (result: ScanResult, verbose: boolean = false): void =>
     `Total Vulnerabilities: ${result.totalVulnerabilities} (` +
       `${chalk.red.bold(result.highSeverityCount)} High, ` +
       `${chalk.yellow.bold(result.mediumSeverityCount)} Medium, ` +
-      `${chalk.blue.bold(result.lowSeverityCount)} Low)`
+      `${chalk.blue.bold(result.lowSeverityCount)} Low)`,
   );
+
+  if (result.scanDuration) {
+    console.log(`Scan Duration: ${result.scanDuration}ms`);
+  }
 
   console.log('─'.repeat(80));
 
@@ -36,9 +39,9 @@ const formatTextOutput = (result: ScanResult, verbose: boolean = false): void =>
   } else {
     // Group vulnerabilities by category
     const groupedVulnerabilities = {
-      dependency: result.dependencyVulnerabilities,
-      code: result.codeVulnerabilities,
-      configuration: result.configVulnerabilities,
+      [CONSTANTS.SCAN_CATEGORIES.DEPENDENCY]: result.dependencyVulnerabilities,
+      [CONSTANTS.SCAN_CATEGORIES.CODE]: result.codeVulnerabilities,
+      [CONSTANTS.SCAN_CATEGORIES.CONFIGURATION]: result.configVulnerabilities,
     };
 
     // Print vulnerabilities by category
@@ -48,76 +51,110 @@ const formatTextOutput = (result: ScanResult, verbose: boolean = false): void =>
         console.log('─'.repeat(80));
 
         vulnerabilities.forEach((vulnerability, index) => {
-          const severityColor = getSeverityColor(vulnerability.severity);
-
-          console.log(`${index + 1}. ${chalk.bold(vulnerability.title)}`);
-          console.log(`   ${severityColor(`[${vulnerability.severity.toUpperCase()}]`)} ${vulnerability.description}`);
-
-          if (vulnerability.location) {
-            console.log(
-              `   ${chalk.gray('Location:')} ${vulnerability.location}${
-                vulnerability.line ? `:${vulnerability.line}` : ''
-              }`
-            );
-          }
-
-          if (vulnerability.code) {
-            console.log(`   ${chalk.gray('Code:')} ${chalk.italic(vulnerability.code)}`);
-          }
-
-          console.log(`   ${chalk.gray('Recommendation:')} ${vulnerability.recommendation}`);
-
-          if (vulnerability.reference) {
-            console.log(`   ${chalk.gray('Reference:')} ${vulnerability.reference}`);
-          }
-
-          console.log('');
+          formatVulnerability(vulnerability, index + 1);
         });
       }
     }
   }
 
   // Only print scanned files if verbose mode is enabled
-  if (verbose && result.scannedFiles && result.scannedFiles.length > 0) {
-    console.log(chalk.bold('\nSCANNED FILES'));
-    console.log('─'.repeat(80));
-    console.log(`Total files scanned: ${chalk.cyan(result.scannedFiles.length)}`);
-    console.log('');
-
-    // Group files by directory for better organization
-    const filesByDirectory: Record<string, string[]> = {};
-    result.scannedFiles.forEach((file) => {
-      const directory = file.includes('/') ? file.substring(0, file.lastIndexOf('/')) : '';
-      if (!filesByDirectory[directory]) {
-        filesByDirectory[directory] = [];
-      }
-      const filename = file.includes('/') ? file.substring(file.lastIndexOf('/') + 1) : file;
-      filesByDirectory[directory].push(filename);
-    });
-
-    // Print files by directory
-    const directories = Object.keys(filesByDirectory).sort();
-    directories.forEach((directory) => {
-      if (directory) {
-        console.log(chalk.cyan(`${directory}/`));
-      }
-      filesByDirectory[directory].sort().forEach((file) => {
-        console.log(directory ? `  ${file}` : file);
-      });
-    });
+  if (verbose && result.scannedFiles?.length > 0) {
+    formatScannedFiles(result.scannedFiles);
   }
 };
 
-const formatJsonOutput = (result: ScanResult): void => {
-  console.log(JSON.stringify(result, null, 2));
+const formatVulnerability = (vulnerability: SecurityVulnerability, index: number): void => {
+  const severityColor = getSeverityColor(vulnerability.severity);
+
+  console.log(`${index}. ${chalk.bold(vulnerability.title)}`);
+  console.log(
+    `   ${severityColor(`[${vulnerability.severity.toUpperCase()}]`)} ${vulnerability.description}`,
+  );
+
+  if (vulnerability.location) {
+    console.log(
+      `   ${chalk.gray('Location:')} ${vulnerability.location}${
+        vulnerability.line ? `:${vulnerability.line}` : ''
+      }`,
+    );
+  }
+
+  if (vulnerability.code) {
+    console.log(`   ${chalk.gray('Code:')} ${chalk.italic(vulnerability.code)}`);
+  }
+
+  console.log(`   ${chalk.gray('Recommendation:')} ${vulnerability.recommendation}`);
+
+  if (vulnerability.reference) {
+    console.log(`   ${chalk.gray('Reference:')} ${vulnerability.reference}`);
+  }
+
+  console.log('');
 };
 
-export const formatResults = (result: ScanResult, format: string, verbose: boolean = false): void => {
-  switch (format.toLowerCase()) {
-    case 'json':
+const formatScannedFiles = (scannedFiles: readonly string[]): void => {
+  console.log(chalk.bold('\nSCANNED FILES'));
+  console.log('─'.repeat(80));
+  console.log(`Total files scanned: ${chalk.cyan(scannedFiles.length)}`);
+  console.log('');
+
+  // Group files by directory for better organization
+  const filesByDirectory: Record<string, string[]> = {};
+  scannedFiles.forEach(file => {
+    const directory = file.includes('/') ? file.substring(0, file.lastIndexOf('/')) : '';
+    if (!filesByDirectory[directory]) {
+      filesByDirectory[directory] = [];
+    }
+    const filename = file.includes('/') ? file.substring(file.lastIndexOf('/') + 1) : file;
+    filesByDirectory[directory].push(filename);
+  });
+
+  // Print files by directory
+  const directories = Object.keys(filesByDirectory).sort();
+  directories.forEach(directory => {
+    if (directory) {
+      console.log(chalk.bold(`  ${directory}/`));
+      filesByDirectory[directory].forEach(filename => {
+        console.log(`    ${filename}`);
+      });
+    } else {
+      console.log(chalk.bold('  Root files:'));
+      filesByDirectory[directory].forEach(filename => {
+        console.log(`    ${filename}`);
+      });
+    }
+    console.log('');
+  });
+};
+
+const formatJsonOutput = (result: ScanResult): void => {
+  const jsonOutput = {
+    summary: {
+      totalVulnerabilities: result.totalVulnerabilities,
+      highSeverityCount: result.highSeverityCount,
+      mediumSeverityCount: result.mediumSeverityCount,
+      lowSeverityCount: result.lowSeverityCount,
+      scanDuration: result.scanDuration,
+      timestamp: result.timestamp,
+      scannedFilesCount: result.scannedFiles.length,
+    },
+    vulnerabilities: result.vulnerabilities,
+    scannedFiles: result.scannedFiles,
+  };
+
+  console.log(JSON.stringify(jsonOutput, null, 2));
+};
+
+export const formatResults = (
+  result: ScanResult,
+  format: OutputFormat = CONSTANTS.OUTPUT_FORMATS.TEXT,
+  verbose: boolean = false,
+): void => {
+  switch (format) {
+    case CONSTANTS.OUTPUT_FORMATS.JSON:
       formatJsonOutput(result);
       break;
-    case 'text':
+    case CONSTANTS.OUTPUT_FORMATS.TEXT:
     default:
       formatTextOutput(result, verbose);
       break;

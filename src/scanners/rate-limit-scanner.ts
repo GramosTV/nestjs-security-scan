@@ -89,7 +89,7 @@ export class RateLimitScanner implements Scanner {
 
         console.log(
           `${chalk.cyan('➤')} Found vulnerability: ` +
-            `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Missing Rate Limiting on Authentication Endpoints')}`
+            `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Missing Rate Limiting on Authentication Endpoints')}`,
         );
 
         this.vulnerabilities.push({
@@ -106,23 +106,28 @@ export class RateLimitScanner implements Scanner {
       }
 
       // Check for main.ts to see if global throttler is applied
-      const mainTsFiles = files.filter((file) => path.basename(file) === 'main.ts');
+      const mainTsFiles = files.filter(file => path.basename(file) === 'main.ts');
       if (mainTsFiles.length > 0) {
         for (const mainFile of mainTsFiles) {
           const content = await fs.readFile(mainFile, 'utf8');
           const relativePath = path.relative(this.projectPath, mainFile);
 
           // Check if app.use() is present but no rate limiter
-          if (content.includes('app.use(') && !content.includes('throttler') && !content.includes('rateLimit')) {
+          if (
+            content.includes('app.use(') &&
+            !content.includes('throttler') &&
+            !content.includes('rateLimit')
+          ) {
             console.log(
               `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativePath)}: ` +
-                `${chalk.blue.bold('[LOW]')} ${chalk.bold('Consider Adding Global Rate Limiting')}`
+                `${chalk.blue.bold('[LOW]')} ${chalk.bold('Consider Adding Global Rate Limiting')}`,
             );
 
             this.vulnerabilities.push({
               id: 'global-rate-limit-recommendation',
               title: 'Consider Adding Global Rate Limiting',
-              description: "The application uses middleware but doesn't appear to have global rate limiting configured",
+              description:
+                "The application uses middleware but doesn't appear to have global rate limiting configured",
               severity: 'low',
               location: relativePath,
               recommendation:
@@ -140,7 +145,7 @@ export class RateLimitScanner implements Scanner {
       await this.checkPackageJson();
 
       this.log(
-        `Rate limit scanner completed. Scanned ${this.scannedFiles.length} files, found ${this.vulnerabilities.length} vulnerabilities`
+        `Rate limit scanner completed. Scanned ${this.scannedFiles.length} files, found ${this.vulnerabilities.length} vulnerabilities`,
       );
 
       if (this.vulnerabilities.length > 0) {
@@ -172,16 +177,21 @@ export class RateLimitScanner implements Scanner {
           (content.includes('auth') || content.includes('login') || content.includes('user'))
         ) {
           // Check if this file has auth/login/user related endpoints but no throttling
-          if (!content.includes('@Throttle') && !content.includes('@SkipThrottle') && !content.includes('RateLimit')) {
+          if (
+            !content.includes('@Throttle') &&
+            !content.includes('@SkipThrottle') &&
+            !content.includes('RateLimit')
+          ) {
             console.log(
               `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativePath)}: ` +
-                `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Authentication Controller Without Rate Limiting')}`
+                `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Authentication Controller Without Rate Limiting')}`,
             );
 
             this.vulnerabilities.push({
               id: 'auth-controller-missing-rate-limit',
               title: 'Authentication Controller Without Rate Limiting',
-              description: 'Controller handling authentication operations lacks rate limiting decorators',
+              description:
+                'Controller handling authentication operations lacks rate limiting decorators',
               severity: 'medium',
               location: relativePath,
               recommendation:
@@ -210,13 +220,14 @@ export class RateLimitScanner implements Scanner {
         if (!dependencies['@nestjs/throttler'] && this.hasAuthEndpoints) {
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow('package.json')}: ` +
-              `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Missing Throttler Package')}`
+              `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Missing Throttler Package')}`,
           );
 
           this.vulnerabilities.push({
             id: 'missing-throttler-package',
             title: 'Missing Throttler Package',
-            description: 'Application has authentication endpoints but is missing the @nestjs/throttler package',
+            description:
+              'Application has authentication endpoints but is missing the @nestjs/throttler package',
             severity: 'medium',
             location: 'package.json',
             recommendation:
@@ -226,10 +237,14 @@ export class RateLimitScanner implements Scanner {
         }
 
         // Check for Express Rate Limit as an alternative
-        if (!dependencies['express-rate-limit'] && !dependencies['@nestjs/throttler'] && this.hasAuthEndpoints) {
+        if (
+          !dependencies['express-rate-limit'] &&
+          !dependencies['@nestjs/throttler'] &&
+          this.hasAuthEndpoints
+        ) {
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow('package.json')}: ` +
-              `${chalk.blue.bold('[LOW]')} ${chalk.bold('No Rate Limiting Packages Detected')}`
+              `${chalk.blue.bold('[LOW]')} ${chalk.bold('No Rate Limiting Packages Detected')}`,
           );
 
           this.vulnerabilities.push({

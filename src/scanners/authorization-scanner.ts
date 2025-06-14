@@ -59,10 +59,10 @@ export class AuthorizationScanner implements Scanner {
       await this.collectProjectStructure(files);
 
       // Second pass: analyze authorization patterns
-      await this.analyzeAuthorization(files);
+      await this.analyzeAuthorization();
 
       this.log(
-        `Authorization scanner completed. Scanned ${this.scannedFiles.length} files, found ${this.vulnerabilities.length} vulnerabilities`
+        `Authorization scanner completed. Scanned ${this.scannedFiles.length} files, found ${this.vulnerabilities.length} vulnerabilities`,
       );
 
       if (this.vulnerabilities.length > 0) {
@@ -162,7 +162,9 @@ export class AuthorizationScanner implements Scanner {
           line: lineNumber,
         });
 
-        this.log(`Found ${methodName} endpoint: ${path} (auth: ${hasAuth}) in ${filePath}:${lineNumber}`);
+        this.log(
+          `Found ${methodName} endpoint: ${path} (auth: ${hasAuth}) in ${filePath}:${lineNumber}`,
+        );
       }
     }
 
@@ -183,12 +185,12 @@ export class AuthorizationScanner implements Scanner {
     );
   }
 
-  private async analyzeAuthorization(files: string[]): Promise<void> {
+  private async analyzeAuthorization(): Promise<void> {
     // Analyze if guards/roles are applied consistently
     this.checkForMissingGuards();
 
     // Analyze controllers for potential IDOR issues
-    for (const [filePath, _] of this.endpoints) {
+    for (const [filePath] of this.endpoints) {
       await this.checkForIdorVulnerabilities(filePath);
     }
 
@@ -203,24 +205,30 @@ export class AuthorizationScanner implements Scanner {
         basePath: '',
         isAuthController: filePath.includes('auth') || filePath.includes('login'),
         isAdminController: filePath.includes('admin'),
-        isSecuredResource: filePath.includes('user') || filePath.includes('profile') || filePath.includes('account'),
+        isSecuredResource:
+          filePath.includes('user') || filePath.includes('profile') || filePath.includes('account'),
       };
 
       // Find endpoints with missing auth
-      const endpointsWithoutAuth = endpoints.filter((endpoint) => !endpoint.hasAuth);
+      const endpointsWithoutAuth = endpoints.filter(endpoint => !endpoint.hasAuth);
 
       // Skip health check or public endpoints
       const skipEndpoints = (endpoint: string): boolean => {
         return (
-          endpoint.includes('health') || endpoint.includes('status') || endpoint.includes('public') || endpoint === '/'
+          endpoint.includes('health') ||
+          endpoint.includes('status') ||
+          endpoint.includes('public') ||
+          endpoint === '/'
         );
       };
 
       // Filtered endpoints that need attention
       const vulnerableEndpoints = endpointsWithoutAuth.filter(
-        (e) =>
+        e =>
           !skipEndpoints(e.path) &&
-          (e.method !== 'Get' || controllerInfo.isSecuredResource || controllerInfo.isAdminController)
+          (e.method !== 'Get' ||
+            controllerInfo.isSecuredResource ||
+            controllerInfo.isAdminController),
       );
 
       if (vulnerableEndpoints.length > 0) {
@@ -231,11 +239,11 @@ export class AuthorizationScanner implements Scanner {
 
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(filePath)}:${chalk.yellow(
-              endpoint.line.toString()
+              endpoint.line.toString(),
             )}: ` +
               `${severity === 'high' ? chalk.red.bold('[HIGH]') : chalk.yellow.bold('[MEDIUM]')} ${chalk.bold(
-                `${endpoint.method} Endpoint Without Authorization Guards`
-              )}`
+                `${endpoint.method} Endpoint Without Authorization Guards`,
+              )}`,
           );
 
           this.vulnerabilities.push({
@@ -247,7 +255,8 @@ export class AuthorizationScanner implements Scanner {
             severity: severity as any,
             location: filePath,
             line: endpoint.line,
-            recommendation: 'Apply @UseGuards() decorator with appropriate authentication and authorization guards',
+            recommendation:
+              'Apply @UseGuards() decorator with appropriate authentication and authorization guards',
             category: 'code',
           });
         }
@@ -261,14 +270,16 @@ export class AuthorizationScanner implements Scanner {
 
       // Check for req.params.id or similar without user ID validation
       if (
-        (content.includes('params.id') || content.includes('params.userId') || content.includes('params["id"]')) &&
+        (content.includes('params.id') ||
+          content.includes('params.userId') ||
+          content.includes('params["id"]')) &&
         !content.includes('user.id') &&
         !content.includes('req.user') &&
         (content.includes('findOne') || content.includes('findById'))
       ) {
         console.log(
           `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(filePath)}: ` +
-            `${chalk.red.bold('[HIGH]')} ${chalk.bold('Potential Insecure Direct Object Reference (IDOR)')}`
+            `${chalk.red.bold('[HIGH]')} ${chalk.bold('Potential Insecure Direct Object Reference (IDOR)')}`,
         );
 
         this.vulnerabilities.push({
@@ -294,10 +305,13 @@ export class AuthorizationScanner implements Scanner {
         !content.includes('getUserId')
       ) {
         // Only flag this if the controller doesn't have class-level guards
-        if (!content.includes('@UseGuards') || content.indexOf('@UseGuards') > content.indexOf('findOne')) {
+        if (
+          !content.includes('@UseGuards') ||
+          content.indexOf('@UseGuards') > content.indexOf('findOne')
+        ) {
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(filePath)}: ` +
-              `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Data Access Without Owner Validation')}`
+              `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Data Access Without Owner Validation')}`,
           );
 
           this.vulnerabilities.push({
@@ -338,13 +352,14 @@ export class AuthorizationScanner implements Scanner {
         ) {
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow('package.json')}: ` +
-              `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Missing Authorization Packages')}`
+              `${chalk.yellow.bold('[MEDIUM]')} ${chalk.bold('Missing Authorization Packages')}`,
           );
 
           this.vulnerabilities.push({
             id: 'missing-auth-packages',
             title: 'Missing Authorization Packages',
-            description: 'The application implements a user entity but lacks standard authorization packages',
+            description:
+              'The application implements a user entity but lacks standard authorization packages',
             severity: 'medium',
             location: 'package.json',
             recommendation:
@@ -354,16 +369,21 @@ export class AuthorizationScanner implements Scanner {
         }
 
         // Recommend CASL for RBAC if handling roles without it
-        if (this.hasRoles && !dependencies['@casl/ability'] && !dependencies['nest-access-control']) {
+        if (
+          this.hasRoles &&
+          !dependencies['@casl/ability'] &&
+          !dependencies['nest-access-control']
+        ) {
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow('package.json')}: ` +
-              `${chalk.blue.bold('[LOW]')} ${chalk.bold('Consider Using RBAC Library')}`
+              `${chalk.blue.bold('[LOW]')} ${chalk.bold('Consider Using RBAC Library')}`,
           );
 
           this.vulnerabilities.push({
             id: 'missing-rbac-library',
             title: 'Consider Using RBAC Library',
-            description: 'Role-based access control is implemented without a dedicated RBAC library',
+            description:
+              'Role-based access control is implemented without a dedicated RBAC library',
             severity: 'low',
             location: 'package.json',
             recommendation:

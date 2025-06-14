@@ -44,7 +44,7 @@ export class ConfigScanner implements Scanner {
       vulnerabilities.push(...packageJsonVulns);
 
       this.log(
-        `Config scanner completed. Scanned ${this.scannedFiles.length} files, found ${vulnerabilities.length} vulnerabilities`
+        `Config scanner completed. Scanned ${this.scannedFiles.length} files, found ${vulnerabilities.length} vulnerabilities`,
       );
 
       // Always display the number of vulnerabilities found
@@ -69,7 +69,7 @@ export class ConfigScanner implements Scanner {
       path.join(this.projectPath, '.env.development'),
       path.join(this.projectPath, '.env.production'),
       path.join(this.projectPath, '.env.local'),
-    ].filter((file) => fs.existsSync(file));
+    ].filter(file => fs.existsSync(file));
 
     this.log(`Found ${envFiles.length} .env files to scan`);
 
@@ -102,8 +102,9 @@ export class ConfigScanner implements Scanner {
               // Format and colorize the vulnerability finding
               console.log(
                 `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativeFilePath)}:${chalk.yellow(
-                  lineNumber.toString()
-                )}: ` + `${chalk.yellow.bold('[MEDIUM]')} Sensitive ${pattern.label} in Environment File`
+                  lineNumber.toString(),
+                )}: ` +
+                  `${chalk.yellow.bold('[MEDIUM]')} Sensitive ${pattern.label} in Environment File`,
               );
 
               vulnerabilities.push({
@@ -128,7 +129,7 @@ export class ConfigScanner implements Scanner {
           // Format and colorize the vulnerability finding
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativeFilePath)}: ` +
-              `${chalk.yellow.bold('[MEDIUM]')} Environment File Not in .gitignore`
+              `${chalk.yellow.bold('[MEDIUM]')} Environment File Not in .gitignore`,
           );
 
           vulnerabilities.push({
@@ -137,7 +138,8 @@ export class ConfigScanner implements Scanner {
             description: `The environment file ${relativeFilePath} is not excluded from version control in .gitignore`,
             severity: 'medium',
             location: '.gitignore',
-            recommendation: 'Add .env files to .gitignore to prevent committing sensitive data to version control',
+            recommendation:
+              'Add .env files to .gitignore to prevent committing sensitive data to version control',
             category: 'configuration',
           });
         }
@@ -174,7 +176,7 @@ export class ConfigScanner implements Scanner {
         path.join(this.projectPath, 'src/**/config.{ts,js}'),
       ];
 
-      let configFiles = [];
+      const configFiles = [];
       for (const pattern of configPatterns) {
         this.log(`Searching with pattern: ${pattern}`);
         try {
@@ -216,8 +218,8 @@ export class ConfigScanner implements Scanner {
               // Format and colorize the vulnerability finding
               console.log(
                 `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativeFilePath)}:${chalk.yellow(
-                  lineNumber.toString()
-                )}: ` + `${chalk.red.bold('[HIGH]')} Hardcoded ${pattern.label} in Configuration`
+                  lineNumber.toString(),
+                )}: ` + `${chalk.red.bold('[HIGH]')} Hardcoded ${pattern.label} in Configuration`,
               );
 
               vulnerabilities.push({
@@ -236,11 +238,15 @@ export class ConfigScanner implements Scanner {
           }
 
           // Check for insecure session configuration
-          if (content.includes('cookie') && content.includes('secure') && content.includes('false')) {
+          if (
+            content.includes('cookie') &&
+            content.includes('secure') &&
+            content.includes('false')
+          ) {
             // Format and colorize the vulnerability finding
             console.log(
               `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativeFilePath)}: ` +
-                `${chalk.yellow.bold('[MEDIUM]')} Insecure Cookie Configuration`
+                `${chalk.yellow.bold('[MEDIUM]')} Insecure Cookie Configuration`,
             );
 
             vulnerabilities.push({
@@ -317,7 +323,7 @@ export class ConfigScanner implements Scanner {
           // Format and colorize the vulnerability finding
           console.log(
             `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow('package.json')}: ` +
-              `${chalk.yellow.bold('[MEDIUM]')} ${recommendation.title}`
+              `${chalk.yellow.bold('[MEDIUM]')} ${recommendation.title}`,
           );
 
           vulnerabilities.push({
@@ -392,10 +398,13 @@ export class ConfigScanner implements Scanner {
 
     // Get the part before and after the separator
     const before = text.substring(0, separatorIndex + 1);
-    let after = text.substring(separatorIndex + 1).trim();
+    const after = text.substring(separatorIndex + 1).trim();
 
     // If the value is wrapped in quotes, preserve the quotes but mask the content
-    if ((after.startsWith("'") && after.endsWith("'")) || (after.startsWith('"') && after.endsWith('"'))) {
+    if (
+      (after.startsWith("'") && after.endsWith("'")) ||
+      (after.startsWith('"') && after.endsWith('"'))
+    ) {
       const quote = after[0];
       return `${before} ${quote}********${quote}`;
     }

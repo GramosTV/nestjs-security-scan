@@ -1,19 +1,19 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import { DependencyScanner } from './scanners/dependency-scanner';
 import { CodeScanner } from './scanners/code-scanner';
 import { ConfigScanner } from './scanners/config-scanner';
 import { RateLimitScanner } from './scanners/rate-limit-scanner';
 import { AuthorizationScanner } from './scanners/authorization-scanner';
 import { SecurityVulnerability, ScanResult, ScanOptions } from './types';
+import { CONSTANTS } from './constants';
 import chalk from 'chalk';
 
 export class SecurityScanner {
   private options: ScanOptions;
+  private projectPath: string;
   private vulnerabilities: SecurityVulnerability[] = [];
   private scannedFiles: Set<string> = new Set<string>();
-
   constructor(options: ScanOptions) {
     this.options = {
       projectPath: path.resolve(options.projectPath || process.cwd()),
@@ -22,8 +22,9 @@ export class SecurityScanner {
       checkCode: options.checkCode !== false,
       checkConfig: options.checkConfig !== false,
     };
+    this.projectPath = this.options.projectPath;
 
-    console.log(`Project path resolved to: ${this.options.projectPath}`);
+    console.log(`Project path resolved to: ${this.projectPath}`);
   }
 
   private log(message: string): void {
@@ -31,9 +32,8 @@ export class SecurityScanner {
       console.log(message);
     }
   }
-
   private detectActualProjectDirectory(): string {
-    const originalPath = this.options.projectPath;
+    const originalPath = this.projectPath;
 
     if (this.isValidNestjsProject(originalPath)) {
       return originalPath;
@@ -68,41 +68,43 @@ export class SecurityScanner {
 
     const nestFiles = ['main.ts', 'app.module.ts', 'server.ts'];
     const srcFiles = fs.readdirSync(srcPath);
-    const hasNestFiles = nestFiles.some((file) => srcFiles.includes(file));
+    const hasNestFiles = nestFiles.some(file => srcFiles.includes(file));
 
     return hasNestFiles;
   }
 
   private validateProject(): boolean {
     try {
-      if (!fs.existsSync(this.options.projectPath)) {
-        throw new Error(`Project directory not found: ${this.options.projectPath}`);
+      if (!fs.existsSync(this.projectPath)) {
+        throw new Error(`Project directory not found: ${this.projectPath}`);
       }
 
       if (this.options.verbose) {
-        console.log('Project directory content:', fs.readdirSync(this.options.projectPath));
+        console.log('Project directory content:', fs.readdirSync(this.projectPath));
       }
 
-      const packageJsonPath = path.join(this.options.projectPath, 'package.json');
+      const packageJsonPath = path.join(this.projectPath, 'package.json');
       if (!fs.existsSync(packageJsonPath)) {
-        throw new Error(`package.json not found in ${this.options.projectPath}`);
+        throw new Error(`package.json not found in ${this.projectPath}`);
       }
 
       let packageJson;
       try {
         packageJson = fs.readJsonSync(packageJsonPath);
-      } catch (e) {
-        throw new Error(`Failed to parse package.json in ${this.options.projectPath}`);
+      } catch {
+        throw new Error(`Failed to parse package.json in ${this.projectPath}`);
       }
 
       const dependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
 
-      if (!Object.keys(dependencies).some((dep) => dep.startsWith('@nestjs/'))) {
-        throw new Error('This does not appear to be a NestJS project. No @nestjs/* dependencies found.');
+      if (!Object.keys(dependencies).some(dep => dep.startsWith('@nestjs/'))) {
+        throw new Error(
+          'This does not appear to be a NestJS project. No @nestjs/* dependencies found.',
+        );
       }
 
       if (this.options.verbose) {
-        const srcPath = path.join(this.options.projectPath, 'src');
+        const srcPath = path.join(this.projectPath, 'src');
         if (fs.existsSync(srcPath)) {
           console.log('Found src directory:', srcPath);
           console.log('src directory content:', fs.readdirSync(srcPath));
@@ -121,7 +123,7 @@ export class SecurityScanner {
   }
 
   private scanSourceFiles(): string[] {
-    const srcPath = path.join(this.options.projectPath, 'src');
+    const srcPath = path.join(this.projectPath, 'src');
     if (!fs.existsSync(srcPath)) {
       this.log(`Source directory not found at ${srcPath}`);
       return [];
@@ -145,7 +147,11 @@ export class SecurityScanner {
         const fullPath = path.join(dir, entry.name);
 
         if (entry.isDirectory()) {
-          if (entry.name !== 'node_modules' && entry.name !== 'dist' && entry.name !== 'test-nestjs-security') {
+          if (
+            entry.name !== 'node_modules' &&
+            entry.name !== 'dist' &&
+            entry.name !== 'test-nestjs-security'
+          ) {
             this.scanDirectory(fullPath, result, extensions);
           }
         } else if (entry.isFile() && extensions.includes(path.extname(entry.name))) {
@@ -159,25 +165,26 @@ export class SecurityScanner {
       }
     }
   }
-
   async scan(): Promise<ScanResult> {
     const detectedProjectPath = this.detectActualProjectDirectory();
-    if (detectedProjectPath !== this.options.projectPath) {
+    if (detectedProjectPath !== this.projectPath) {
       this.log(`Using detected project path: ${detectedProjectPath}`);
-      this.options.projectPath = detectedProjectPath;
+      this.projectPath = detectedProjectPath;
     }
 
     if (!this.validateProject()) {
-      throw new Error('Project validation failed. Please check that this is a valid NestJS project.');
+      throw new Error(
+        'Project validation failed. Please check that this is a valid NestJS project.',
+      );
     }
 
-    this.log(`Starting security scan of ${this.options.projectPath}`);
+    this.log(`Starting security scan of ${this.projectPath}`);
 
     const sourceFiles = this.scanSourceFiles();
 
     const startTime = Date.now();
     for (const filePath of sourceFiles) {
-      const relativePath = path.relative(this.options.projectPath, filePath);
+      const relativePath = path.relative(this.projectPath, filePath);
       this.log(`Directly scanning file: ${relativePath}`);
 
       this.scannedFiles.add(relativePath);
@@ -202,50 +209,50 @@ export class SecurityScanner {
 
     if (this.options.checkDependencies) {
       console.log('Scanning dependencies for vulnerabilities...');
-      const dependencyScanner = new DependencyScanner(this.options.projectPath, this.options.verbose);
+      const dependencyScanner = new DependencyScanner(this.projectPath, this.options.verbose);
       const dependencyScanResult = await dependencyScanner.scan();
       dependencyVulnerabilities = dependencyScanResult.vulnerabilities;
       this.vulnerabilities.push(...dependencyVulnerabilities);
 
-      dependencyScanResult.scannedFiles.forEach((file) => this.scannedFiles.add(file));
+      dependencyScanResult.scannedFiles.forEach(file => this.scannedFiles.add(file));
     }
 
     if (this.options.checkCode) {
       console.log('Scanning code for security issues...');
-      const codeScanner = new CodeScanner(this.options.projectPath, this.options.verbose);
+      const codeScanner = new CodeScanner(this.projectPath, this.options.verbose);
       const codeScanResult = await codeScanner.scan();
       codeVulnerabilities = codeScanResult.vulnerabilities;
       this.vulnerabilities.push(...codeVulnerabilities);
 
-      codeScanResult.scannedFiles.forEach((file) => this.scannedFiles.add(file));
+      codeScanResult.scannedFiles.forEach(file => this.scannedFiles.add(file));
 
       // Run the rate limiting scanner
       console.log('Scanning for rate limiting issues...');
-      const rateLimitScanner = new RateLimitScanner(this.options.projectPath, this.options.verbose);
+      const rateLimitScanner = new RateLimitScanner(this.projectPath, this.options.verbose);
       const rateLimitScanResult = await rateLimitScanner.scan();
       rateLimitVulnerabilities = rateLimitScanResult.vulnerabilities;
       this.vulnerabilities.push(...rateLimitVulnerabilities);
 
-      rateLimitScanResult.scannedFiles.forEach((file) => this.scannedFiles.add(file));
+      rateLimitScanResult.scannedFiles.forEach(file => this.scannedFiles.add(file));
 
       // Run the authorization scanner
       console.log('Scanning for authorization issues...');
-      const authorizationScanner = new AuthorizationScanner(this.options.projectPath, this.options.verbose);
+      const authorizationScanner = new AuthorizationScanner(this.projectPath, this.options.verbose);
       const authorizationScanResult = await authorizationScanner.scan();
       authorizationVulnerabilities = authorizationScanResult.vulnerabilities;
       this.vulnerabilities.push(...authorizationVulnerabilities);
 
-      authorizationScanResult.scannedFiles.forEach((file) => this.scannedFiles.add(file));
+      authorizationScanResult.scannedFiles.forEach(file => this.scannedFiles.add(file));
     }
 
     if (this.options.checkConfig) {
       console.log('Scanning configurations for security issues...');
-      const configScanner = new ConfigScanner(this.options.projectPath, this.options.verbose);
+      const configScanner = new ConfigScanner(this.projectPath, this.options.verbose);
       const configScanResult = await configScanner.scan();
       configVulnerabilities = configScanResult.vulnerabilities;
       this.vulnerabilities.push(...configVulnerabilities);
 
-      configScanResult.scannedFiles.forEach((file) => this.scannedFiles.add(file));
+      configScanResult.scannedFiles.forEach(file => this.scannedFiles.add(file));
     }
 
     const scannedFilesArray = Array.from(this.scannedFiles).sort();
@@ -254,9 +261,15 @@ export class SecurityScanner {
       console.log(`Total files scanned: ${scannedFilesArray.length}`);
     }
 
-    const highSeverityCount = this.vulnerabilities.filter((v) => v.severity === 'high').length;
-    const mediumSeverityCount = this.vulnerabilities.filter((v) => v.severity === 'medium').length;
-    const lowSeverityCount = this.vulnerabilities.filter((v) => v.severity === 'low').length;
+    const highSeverityCount = this.vulnerabilities.filter(
+      v => v.severity === CONSTANTS.SEVERITY_LEVELS.HIGH,
+    ).length;
+    const mediumSeverityCount = this.vulnerabilities.filter(
+      v => v.severity === CONSTANTS.SEVERITY_LEVELS.MEDIUM,
+    ).length;
+    const lowSeverityCount = this.vulnerabilities.filter(
+      v => v.severity === CONSTANTS.SEVERITY_LEVELS.LOW,
+    ).length;
 
     return {
       vulnerabilities: this.vulnerabilities,
@@ -272,164 +285,185 @@ export class SecurityScanner {
   }
 
   private analyzeSecurity(filePath: string, content: string): void {
-    const relativePath = path.relative(this.options.projectPath, filePath);
+    const relativePath = path.relative(this.projectPath, filePath);
 
     const securityPatterns = [
       {
         regex: /TypeOrmModule\.forRoot\({[\s\S]*?synchronize:\s*true/gm,
-        severity: 'high',
+        severity: CONSTANTS.SEVERITY_LEVELS.HIGH,
         title: 'Automatic Schema Synchronization in Production',
         description:
           'TypeORM is configured with synchronize: true, which can cause data loss in production environments',
-        recommendation: 'Set synchronize: false in production environments and use migrations instead',
+        recommendation:
+          'Set synchronize: false in production environments and use migrations instead',
       },
       {
         regex: /createConnection\({[\s\S]*?synchronize:\s*true/gm,
-        severity: 'high',
+        severity: CONSTANTS.SEVERITY_LEVELS.HIGH,
         title: 'Automatic Schema Synchronization in Production',
         description:
           'TypeORM is configured with synchronize: true, which can cause data loss in production environments',
-        recommendation: 'Set synchronize: false in production environments and use migrations instead',
+        recommendation:
+          'Set synchronize: false in production environments and use migrations instead',
       },
       {
         regex: /@Body\(\s*\)(?!\s*@ValidateNested|\s*@UsePipes)/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Missing DTO Validation',
-        description: 'Request body is used without validation, which can lead to data injection attacks',
+        description:
+          'Request body is used without validation, which can lead to data injection attacks',
         recommendation:
           'Apply validation using class-validator and class-transformer with ValidateNested or ValidationPipe',
       },
       {
         regex: /cors:\s*true/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Permissive CORS Policy',
-        description: 'CORS is configured to allow all origins, which can lead to cross-site request forgery attacks',
+        description:
+          'CORS is configured to allow all origins, which can lead to cross-site request forgery attacks',
         recommendation: 'Configure CORS with specific origins, methods, and credentials settings',
       },
       {
         regex: /new\s+JwtModule\.register\({[\s\S]*?secret:\s*['"]([^'"]+)['"]/gm,
-        severity: 'high',
+        severity: CONSTANTS.SEVERITY_LEVELS.HIGH,
         title: 'Hardcoded JWT Secret',
         description: 'JWT secret is hardcoded in the source code, which is a security risk',
-        recommendation: 'Use environment variables for JWT secrets and other sensitive configuration values',
+        recommendation:
+          'Use environment variables for JWT secrets and other sensitive configuration values',
       },
       {
         regex: /eval\s*\(/gm,
-        severity: 'high',
+        severity: CONSTANTS.SEVERITY_LEVELS.HIGH,
         title: 'Use of eval() function',
         description: 'Using eval() can lead to code injection vulnerabilities',
-        recommendation: 'Avoid using eval() and use safer alternatives like JSON.parse for JSON data',
+        recommendation:
+          'Avoid using eval() and use safer alternatives like JSON.parse for JSON data',
       },
       {
         regex: /helmet\s*\(\s*\)/gm,
-        severity: 'low',
+        severity: CONSTANTS.SEVERITY_LEVELS.LOW,
         title: 'Default Helmet Configuration',
         description:
           'Using default Helmet configuration may not provide optimal security for your specific application',
-        recommendation: 'Configure Helmet with specific security options based on your application requirements',
+        recommendation:
+          'Configure Helmet with specific security options based on your application requirements',
       },
       {
         regex:
           /const\s+[a-zA-Z0-9_$]+\s*=\s*require\s*\(\s*['"]crypto['"]\s*\)[\s\S]*?createHash\s*\(\s*['"]md5['"]\s*\)/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Weak Hashing Algorithm (MD5)',
         description: 'MD5 is a cryptographically broken hashing algorithm',
         recommendation: 'Use stronger hash functions like SHA-256 or bcrypt/argon2 for passwords',
       },
       {
         regex: /@Query\(\s*\)(?!\s*@ValidateNested|\s*@UsePipes)/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Missing Query Parameter Validation',
-        description: 'Query parameters are used without validation, which can lead to data injection attacks',
-        recommendation: 'Apply validation to query parameters using ValidationPipe or custom validators',
+        description:
+          'Query parameters are used without validation, which can lead to data injection attacks',
+        recommendation:
+          'Apply validation to query parameters using ValidationPipe or custom validators',
       },
       {
         regex: /@Param\(\s*\)(?!\s*@ValidateNested|\s*@UsePipes)/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Missing Route Parameter Validation',
-        description: 'Route parameters are used without validation, which can lead to data injection attacks',
-        recommendation: 'Apply validation to route parameters using ValidationPipe or custom validators',
+        description:
+          'Route parameters are used without validation, which can lead to data injection attacks',
+        recommendation:
+          'Apply validation to route parameters using ValidationPipe or custom validators',
       },
       {
-        regex: /import\s+\{\s*[^}]*\bfs\b[^}]*\}\s+from\s+['"]fs['"]|require\s*\(\s*['"]fs['"]\s*\)/gm,
-        severity: 'medium',
+        regex:
+          /import\s+\{\s*[^}]*\bfs\b[^}]*\}\s+from\s+['"]fs['"]|require\s*\(\s*['"]fs['"]\s*\)/gm,
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Direct Filesystem Access',
-        description: 'Direct filesystem access without validation might lead to path traversal vulnerabilities',
-        recommendation: 'Validate and sanitize file paths, use path.resolve or path.join to normalize paths',
+        description:
+          'Direct filesystem access without validation might lead to path traversal vulnerabilities',
+        recommendation:
+          'Validate and sanitize file paths, use path.resolve or path.join to normalize paths',
       },
       {
         regex: /\.set\(\s*['"]Authorization['"]|\.set\(\s*['"]Cookie['"]/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Setting Sensitive Headers in HTTP Client',
-        description: 'Setting sensitive headers (Authorization, Cookie) directly in HTTP client calls',
+        description:
+          'Setting sensitive headers (Authorization, Cookie) directly in HTTP client calls',
         recommendation: 'Use secure, centralized HTTP interceptors for managing sensitive headers',
       },
       {
         regex: /\.createCipheriv\(\s*['"]des['"]/gm,
-        severity: 'high',
+        severity: CONSTANTS.SEVERITY_LEVELS.HIGH,
         title: 'Weak Encryption Algorithm (DES)',
         description: 'DES is a weak encryption algorithm with small key size',
         recommendation: 'Use AES-256-GCM or other modern encryption algorithms',
       },
       {
         regex: /\.createHash\(\s*['"]sha1['"]/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Weak Hashing Algorithm (SHA-1)',
-        description: 'SHA-1 is considered cryptographically weak and susceptible to collision attacks',
+        description:
+          'SHA-1 is considered cryptographically weak and susceptible to collision attacks',
         recommendation: 'Use stronger hash functions like SHA-256 or bcrypt/argon2 for passwords',
       },
       {
-        regex: /app\.enableCors\(\s*\{\s*origin\s*:\s*['"]?[*]|app\.enableCors\(\s*\{\s*origin\s*:\s*true/gm,
-        severity: 'medium',
+        regex:
+          /app\.enableCors\(\s*\{\s*origin\s*:\s*['"]?[*]|app\.enableCors\(\s*\{\s*origin\s*:\s*true/gm,
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Overly Permissive CORS Policy',
         description: 'CORS is configured to allow all origins with wildcard or true setting',
         recommendation: 'Specify explicit allowed origins rather than using a wildcard or true',
       },
       {
         regex: /\.sign\(\s*[^,]+,\s*['"][^'"]+['"](?!\s*,\s*\{\s*expiresIn)/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'JWT Without Expiration',
         description: 'JWT tokens are being created without an expiration time',
         recommendation: 'Always include expiresIn option when signing JWTs to limit token lifetime',
       },
       {
         regex: /cookie-parser|cookieParser\((?!\s*\{\s*secure\s*:\s*true)/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Insecure Cookie Configuration',
         description: 'Cookies configured without secure flag may be transmitted over insecure HTTP',
-        recommendation: 'Set secure: true and httpOnly: true for cookies in production environments',
+        recommendation:
+          'Set secure: true and httpOnly: true for cookies in production environments',
       },
       {
         regex: /passport\.use\(new\s+LocalStrategy/gm,
-        severity: 'low',
+        severity: CONSTANTS.SEVERITY_LEVELS.LOW,
         title: 'Plain Local Authentication Strategy',
         description: 'Using local authentication strategy without additional security measures',
         recommendation: 'Consider implementing rate limiting and 2FA to protect login endpoints',
       },
       {
         regex: /new\s+MongoClient\(.*\{\s*useUnifiedTopology\s*:\s*true/gm,
-        severity: 'low',
+        severity: CONSTANTS.SEVERITY_LEVELS.LOW,
         title: 'MongoDB Without TLS/SSL',
         description: 'MongoDB connection without explicitly enabling TLS/SSL',
-        recommendation: 'Use TLS/SSL for MongoDB connections by setting ssl: true in connection options',
+        recommendation:
+          'Use TLS/SSL for MongoDB connections by setting ssl: true in connection options',
       },
       {
         regex: /res\.writeHead\(.*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]?\*/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Manual CORS Headers with Wildcard Origin',
         description: 'Manually setting Access-Control-Allow-Origin header with a wildcard',
-        recommendation: 'Use NestJS CORS module with specific origins instead of manual CORS headers',
+        recommendation:
+          'Use NestJS CORS module with specific origins instead of manual CORS headers',
       },
       {
         regex: /\.innerJoin\(.*\bOR\b.*\)/gim,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Potential SQL Injection in TypeORM Query',
-        description: 'Using OR conditions in string format can lead to SQL injection if not properly escaped',
+        description:
+          'Using OR conditions in string format can lead to SQL injection if not properly escaped',
         recommendation: 'Use TypeORM query builder parameters or the where object syntax instead',
       },
       {
         regex: /validate:\s*false/gm,
-        severity: 'medium',
+        severity: CONSTANTS.SEVERITY_LEVELS.MEDIUM,
         title: 'Validation Disabled in ORM Entity',
         description: 'Data validation is explicitly disabled in entity definition',
         recommendation: 'Enable validation in ORM entities and use class-validator decorators',
@@ -446,20 +480,21 @@ export class SecurityScanner {
         const severityColor = this.getSeverityColor(pattern.severity);
         console.log(
           `${chalk.cyan('➤')} Found vulnerability in ${chalk.yellow(relativePath)}:${chalk.yellow(
-            lineNumber.toString()
-          )}: ` + `${severityColor(`[${pattern.severity.toUpperCase()}]`)} ${chalk.bold(pattern.title)}`
+            lineNumber.toString(),
+          )}: ` +
+            `${severityColor(`[${pattern.severity.toUpperCase()}]`)} ${chalk.bold(pattern.title)}`,
         );
 
         this.vulnerabilities.push({
           id: `code-${pattern.title.toLowerCase().replace(/\s+/g, '-')}`,
           title: pattern.title,
           description: pattern.description,
-          severity: pattern.severity as any,
+          severity: pattern.severity,
           location: relativePath,
           line: lineNumber,
           code: matchedCode.trim(),
           recommendation: pattern.recommendation,
-          category: 'code',
+          category: CONSTANTS.SCAN_CATEGORIES.CODE,
         });
       }
     }
@@ -467,11 +502,11 @@ export class SecurityScanner {
 
   private getSeverityColor(severity: string): chalk.Chalk {
     switch (severity) {
-      case 'high':
+      case CONSTANTS.SEVERITY_LEVELS.HIGH:
         return chalk.red.bold;
-      case 'medium':
+      case CONSTANTS.SEVERITY_LEVELS.MEDIUM:
         return chalk.yellow.bold;
-      case 'low':
+      case CONSTANTS.SEVERITY_LEVELS.LOW:
         return chalk.blue.bold;
       default:
         return chalk.white;
