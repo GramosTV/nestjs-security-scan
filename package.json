@@ -1,6 +1,6 @@
 {
   "name": "nestjs-security-scan",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Security scanner for NestJS applications",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -44,12 +44,14 @@
   },
   "homepage": "https://github.com/gramostv/nestjs-security-scan#readme",
   "dependencies": {
+    "@google/genai": "^1.5.1",
     "axios": "^1.8.4",
     "chalk": "^4.1.2",
     "commander": "^13.1.0",
     "dependency-check": "^4.1.0",
     "fs-extra": "^11.3.0",
     "glob": "^11.0.1",
+    "inquirer": "^12.0.0",
     "snyk": "^1.1296.1"
   },
   "devDependencies": {
@@ -58,6 +60,7 @@
     "@nestjs/core": "^11.0.17",
     "@types/fs-extra": "^11.0.4",
     "@types/glob": "^8.1.0",
+    "@types/inquirer": "^9.0.7",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.14.1",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
