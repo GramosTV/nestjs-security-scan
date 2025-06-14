@@ -2,10 +2,12 @@
 
 import { Command } from 'commander';
 import { SecurityScanner } from './scanner';
+import { AiScanner } from './scanners/ai-scanner';
 import { formatResults } from './formatter';
 import { CONSTANTS } from './constants';
 import { SecurityScannerError } from './errors';
 import { Logger } from './utils/logger';
+import { InteractiveCli } from './utils/interactive-cli';
 import { version } from '../package.json';
 
 interface CliOptions {
@@ -15,6 +17,9 @@ interface CliOptions {
   code: boolean;
   config: boolean;
   output: 'text' | 'json';
+  interactive: boolean;
+  aiModel?: string;
+  aiKey?: string;
 }
 
 const logger = Logger.createLogger(false, 'CLI');
@@ -31,29 +36,114 @@ program
   .option('--no-code', 'Skip code security analysis')
   .option('--no-config', 'Skip configuration analysis')
   .option('-o, --output <format>', 'Output format (text, json)', 'text')
+  .option('--no-interactive', 'Skip interactive prompts (use legacy scan)')
+  .option(
+    '--ai-model <model>',
+    'AI model for AI scan (gemini-1.5-pro, gemini-1.5-flash, gemini-pro)',
+  )
+  .option('--ai-key <key>', 'Google AI API key for AI scan')
   .action(async (options: CliOptions) => {
     try {
-      // Update logger level based on verbose flag
-      const scanLogger = Logger.createLogger(options.verbose, 'Scanner');
+      const logger = Logger.createLogger(options.verbose, 'CLI');
+      const interactive = new InteractiveCli(options.verbose);
 
-      scanLogger.info('Starting NestJS Security Check...');
+      let scanType: 'legacy' | 'ai' = 'legacy';
+      let aiConfig: { model: string; apiKey: string } | null = null;
 
-      const scanner = new SecurityScanner({
-        projectPath: options.path,
-        verbose: options.verbose,
-        checkDependencies: options.deps,
-        checkCode: options.code,
-        checkConfig: options.config,
-      });
+      // Determine scan type
+      if (options.interactive !== false && !options.aiModel && !options.aiKey) {
+        // Interactive mode - ask user
+        const choice = await interactive.promptScanType();
+        scanType = choice.type;
 
-      scanLogger.progress('Scanning for security vulnerabilities...');
+        if (scanType === 'ai') {
+          interactive.displayAiScanInfo();
+          interactive.displayApiKeyHelp();
+          aiConfig = await interactive.promptAiConfiguration();
+
+          const confirmed = await interactive.confirmAiScan(options.path, aiConfig.model);
+          if (!confirmed) {
+            logger.info('AI scan cancelled by user');
+            process.exit(CONSTANTS.EXIT_CODES.SUCCESS);
+          }
+        }
+      } else if (options.aiModel && options.aiKey) {
+        // Non-interactive AI mode
+        scanType = 'ai';
+        aiConfig = {
+          model: options.aiModel,
+          apiKey: options.aiKey,
+        };
+      }
 
       const startTime = Date.now();
-      const results = await scanner.scan();
+      let results;
+
+      if (scanType === 'ai' && aiConfig) {
+        // AI-powered scan
+        logger.info('🤖 Starting AI-powered security scan...');
+
+        const aiScanner = new AiScanner({
+          projectPath: options.path,
+          verbose: options.verbose,
+          model: aiConfig.model,
+          apiKey: aiConfig.apiKey,
+        });
+
+        const aiResults = await aiScanner.scan();
+
+        // Convert AI results to ScanResult format
+        results = {
+          vulnerabilities: aiResults.vulnerabilities,
+          totalVulnerabilities: aiResults.vulnerabilities.length,
+          highSeverityCount: aiResults.vulnerabilities.filter(
+            v => v.severity === CONSTANTS.SEVERITY_LEVELS.HIGH,
+          ).length,
+          mediumSeverityCount: aiResults.vulnerabilities.filter(
+            v => v.severity === CONSTANTS.SEVERITY_LEVELS.MEDIUM,
+          ).length,
+          lowSeverityCount: aiResults.vulnerabilities.filter(
+            v => v.severity === CONSTANTS.SEVERITY_LEVELS.LOW,
+          ).length,
+          dependencyVulnerabilities: aiResults.vulnerabilities.filter(
+            v => v.category === CONSTANTS.SCAN_CATEGORIES.DEPENDENCY,
+          ),
+          codeVulnerabilities: aiResults.vulnerabilities.filter(
+            v => v.category === CONSTANTS.SCAN_CATEGORIES.CODE,
+          ),
+          configVulnerabilities: aiResults.vulnerabilities.filter(
+            v => v.category === CONSTANTS.SCAN_CATEGORIES.CONFIGURATION,
+          ),
+          scannedFiles: aiResults.scannedFiles,
+          scanDuration: Date.now() - startTime,
+          timestamp: new Date(),
+        };
+      } else {
+        // Legacy scan
+        logger.info('🔍 Starting traditional security scan...');
+
+        const scanner = new SecurityScanner({
+          projectPath: options.path,
+          verbose: options.verbose,
+          checkDependencies: options.deps,
+          checkCode: options.code,
+          checkConfig: options.config,
+        });
+
+        results = await scanner.scan();
+
+        // Add timing information
+        results = {
+          ...results,
+          scanDuration: Date.now() - startTime,
+          timestamp: new Date(),
+        };
+      }
+
       const endTime = Date.now();
 
       if (options.verbose) {
-        scanLogger.success(`Scan completed in ${endTime - startTime}ms`);
+        logger.success(`Scan completed in ${endTime - startTime}ms`);
       }
 
       formatResults(results, options.output, options.verbose);
